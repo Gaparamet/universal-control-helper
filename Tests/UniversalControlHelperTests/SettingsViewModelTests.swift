@@ -8,7 +8,7 @@ final class SettingsViewModelTests: XCTestCase {
         model.update(snapshot: snapshot(pairingCode: "123456"))
 
         model.editPairingCode("654")
-        model.update(snapshot: snapshot(pairingCode: "123456", status: "연결됨"))
+        model.update(snapshot: snapshot(pairingCode: "123456", status: .connectedSyncing))
 
         XCTAssertEqual(model.pairingCode, "654")
     }
@@ -22,7 +22,7 @@ final class SettingsViewModelTests: XCTestCase {
         model.applyPairingCode()
 
         XCTAssertFalse(model.pairingCodeIsValid)
-        XCTAssertEqual(model.pairingCodeFeedback, "숫자 6자리를 정확히 입력해 주세요.")
+        XCTAssertEqual(model.pairingCodeFeedbackKey, .invalid)
         XCTAssertEqual(model.pairingCode, "123")
     }
 
@@ -47,10 +47,7 @@ final class SettingsViewModelTests: XCTestCase {
         model.regeneratePairingCode()
 
         XCTAssertEqual(model.pairingCode, "654321")
-        XCTAssertEqual(
-            model.pairingCodeFeedback,
-            "새 코드를 생성했습니다. Target Mac에 입력해 주세요."
-        )
+        XCTAssertEqual(model.pairingCodeFeedbackKey, .regenerated)
     }
 
     func testUpdateCheckInvokesCallback() {
@@ -98,19 +95,34 @@ final class SettingsViewModelTests: XCTestCase {
         let model = SettingsViewModel()
         model.launchAtLoginDidChange = { requested in
             XCTAssertTrue(requested)
-            return LaunchAtLoginChangeResult(state: .requiresApproval, message: "승인 필요")
+            return LaunchAtLoginChangeResult(state: .requiresApproval, feedbackKey: .requiresApproval)
         }
 
         model.setLaunchAtLogin(true)
 
         XCTAssertFalse(model.launchAtLoginEnabled)
         XCTAssertTrue(model.launchAtLoginRequiresApproval)
-        XCTAssertEqual(model.launchAtLoginFeedback, "승인 필요")
+        XCTAssertEqual(model.launchAtLoginFeedback, .requiresApproval)
+    }
+
+    func testLanguageSwitching() {
+        let model = SettingsViewModel()
+        var selected: AppLanguage?
+        model.languageDidChange = { selected = $0 }
+
+        model.selectLanguage(.en)
+        XCTAssertEqual(model.language, .en)
+        XCTAssertEqual(selected, .en)
+
+        model.selectLanguage(.th)
+        XCTAssertEqual(model.language, .th)
+        XCTAssertEqual(selected, .th)
     }
 
     private func snapshot(
         pairingCode: String,
-        status: String = "대상 Mac 검색 중"
+        status: ConnectionStatus = .searchingTarget,
+        language: AppLanguage = .th
     ) -> SettingsSnapshot {
         SettingsSnapshot(
             role: .source,
@@ -120,7 +132,8 @@ final class SettingsViewModelTests: XCTestCase {
             helperEnabled: true,
             currentVersion: "1.5.3",
             canCheckForUpdates: true,
-            launchAtLoginState: .disabled
+            launchAtLoginState: .disabled,
+            language: language
         )
     }
 }

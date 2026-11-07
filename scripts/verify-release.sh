@@ -6,7 +6,12 @@ APP_DIR="${1:-$PROJECT_DIR/dist/Universal Control Helper.app}"
 
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 plutil -lint "$APP_DIR/Contents/Info.plist"
-test -f "$APP_DIR/Contents/Resources/Assets.car"
+if [[ -f "$APP_DIR/Contents/Resources/Assets.car" || -f "$APP_DIR/Contents/Resources/AppIcon.icns" ]]; then
+  :
+else
+  echo "Missing app icon asset in $APP_DIR/Contents/Resources" >&2
+  exit 1
+fi
 test -f "$APP_DIR/Contents/Resources/MenuBarIcon.png"
 test -f "$APP_DIR/Contents/Resources/MenuBarIcon@2x.png"
 

@@ -100,4 +100,42 @@ final class RelayMessageTests: XCTestCase {
             "com.apple.inputmethod.Korean.2SetKorean"
         )
     }
+
+    func testInputSourceSelectionTogglesThaiAndABC() {
+        let sources = [
+            InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
+            InputSourceDescriptor(id: "com.apple.keylayout.Thai", name: "Thai"),
+        ]
+        XCTAssertEqual(
+            InputSourceSelection.targetID(currentID: "com.apple.keylayout.Thai", candidates: sources),
+            "com.apple.keylayout.ABC"
+        )
+        XCTAssertEqual(
+            InputSourceSelection.targetID(currentID: "com.apple.keylayout.ABC", candidates: sources),
+            "com.apple.keylayout.Thai"
+        )
+    }
+
+    func testInputSourceSelectionClassifiesAndSelectsThaiState() {
+        let sources = [
+            InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
+            InputSourceDescriptor(id: "com.apple.keylayout.Thai", name: "Thai"),
+        ]
+
+        XCTAssertEqual(InputSourceSelection.state(id: sources[0].id, name: sources[0].name), .abc)
+        XCTAssertEqual(InputSourceSelection.state(id: sources[1].id, name: sources[1].name), .thai)
+        XCTAssertEqual(
+            InputSourceSelection.targetID(for: .thai, candidates: sources),
+            "com.apple.keylayout.Thai"
+        )
+    }
+
+    func testRoundTripThaiInputSourceStateMessage() throws {
+        let original = RelayMessage.setInputSource(.thai, token: "123456")
+        let encoded = try RelayCodec.encodeLine(original)
+        let decoded = try RelayCodec.decode(encoded.dropLast())
+
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.inputSource, .thai)
+    }
 }

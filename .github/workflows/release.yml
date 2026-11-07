@@ -22,7 +22,7 @@ jobs:
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Validate version and release secrets
         id: release
@@ -36,7 +36,13 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          test -n "$SPARKLE_PRIVATE_KEY"
+
+          if [[ -n "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "sparkle_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sparkle_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "SPARKLE_PRIVATE_KEY is absent; skipping Sparkle appcast generation."
+          fi
 
           SIGNING_SECRET_COUNT=0
           for value in \
@@ -110,6 +116,7 @@ jobs:
             ./scripts/verify-release.sh
 
       - name: Create signed Sparkle feed
+        if: steps.release.outputs.sparkle_enabled == 'true'
         run: |
           mkdir -p release-feed
           ditto -c -k --sequesterRsrc --keepParent "dist/Universal Control Helper.app" release-feed/UniversalControlHelper-macOS-universal.zip
@@ -126,32 +133,47 @@ jobs:
           cd dist
           shasum -a 256 UniversalControlHelper-macOS-universal.zip > SHA256SUMS
 
+      - name: Package standard release zip
+        if: steps.release.outputs.sparkle_enabled != 'true'
+        run: |
+          mkdir -p dist
+          COPYFILE_DISABLE=1 ditto -c -k --keepParent --noextattr --norsrc "dist/Universal Control Helper.app" "dist/UniversalControlHelper-${{ steps.release.outputs.version }}-TH-ENG.zip"
+          cp "dist/UniversalControlHelper-${{ steps.release.outputs.version }}-TH-ENG.zip" "dist/UniversalControlHelper-macOS-universal.zip"
+          cp scripts/install.sh dist/install.sh
+          cd dist
+          shasum -a 256 *.zip > SHA256SUMS
+
       - name: Verify Sparkle signature
+        if: steps.release.outputs.sparkle_enabled == 'true'
         run: |
           grep -q 'sparkle:edSignature=' dist/appcast.xml
           grep -q "${{ steps.release.outputs.version }}" dist/appcast.xml
 
       - name: Upload release candidate artifact
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: UniversalControlHelper-${{ steps.release.outputs.version }}-release-candidate
           path: |
-            dist/UniversalControlHelper-macOS-universal.zip
-            dist/appcast.xml
+            dist/*.zip
             dist/SHA256SUMS
             dist/install.sh
 
       - name: Publish GitHub Release
         if: github.event_name == 'push'
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/UniversalControlHelper-macOS-universal.zip \
-            dist/appcast.xml \
-            dist/SHA256SUMS \
-            dist/install.sh \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file RELEASE_NOTES.md
+          ASSETS=(dist/*.zip dist/SHA256SUMS dist/install.sh)
+          if [[ -f dist/appcast.xml ]]; then
+            ASSETS+=(dist/appcast.xml)
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "${ASSETS[@]}" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file RELEASE_NOTES.md
+          fi
 
       - name: Delete temporary signing keychain
         if: always()
