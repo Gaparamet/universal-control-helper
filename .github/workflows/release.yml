@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    environment: release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate version and release secrets
+        id: release
+        run: |
+          PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            test "$VERSION" = "$PLIST_VERSION"
+          else
+            VERSION="$PLIST_VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          test -n "$SPARKLE_PRIVATE_KEY"
+
+          SIGNING_SECRET_COUNT=0
+          for value in \
+            "$APPLE_CERTIFICATE_P12" \
+            "$APPLE_CERTIFICATE_PASSWORD" \
+            "$APPLE_ID" \
+            "$APPLE_APP_SPECIFIC_PASSWORD" \
+            "$APPLE_TEAM_ID"; do
+            if [[ -n "$value" ]]; then
+              SIGNING_SECRET_COUNT=$((SIGNING_SECRET_COUNT + 1))
+            fi
+          done
+          if [[ "$SIGNING_SECRET_COUNT" == "0" ]]; then
+            echo "developer_id_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Developer ID secrets are absent; creating an ad-hoc signed release."
+          elif [[ "$SIGNING_SECRET_COUNT" == "5" ]]; then
+            echo "developer_id_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Developer ID configuration is incomplete." >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.release.outputs.developer_id_enabled == 'true'
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' \
+            | head -1)"
+          test -n "$IDENTITY"
+          echo "CODE_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "CODE_SIGN_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Build Universal app
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          APP_VERSION="$VERSION" BUILD_NUMBER="$VERSION" BUILD_UNIVERSAL=1 ./scripts/build-app.sh
+          if [[ "${{ steps.release.outputs.developer_id_enabled }}" == "true" ]]; then
+            REQUIRE_UNIVERSAL=1 REQUIRE_DEVELOPER_ID=1 ./scripts/verify-release.sh
+          else
+            REQUIRE_UNIVERSAL=1 ./scripts/verify-release.sh
+          fi
+
+      - name: Notarize and staple app
+        if: steps.release.outputs.developer_id_enabled == 'true'
+        run: |
+          ./scripts/notarize-app.sh
+          REQUIRE_UNIVERSAL=1 REQUIRE_DEVELOPER_ID=1 REQUIRE_NOTARIZED=1 \
+            ./scripts/verify-release.sh
+
+      - name: Create signed Sparkle feed
+        run: |
+          mkdir -p release-feed
+          ditto -c -k --sequesterRsrc --keepParent "dist/Universal Control Helper.app" release-feed/UniversalControlHelper-macOS-universal.zip
+          cp RELEASE_NOTES.md release-feed/UniversalControlHelper-macOS-universal.md
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.release.outputs.tag }}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}" \
+            --embed-release-notes \
+            release-feed
+          cp release-feed/UniversalControlHelper-macOS-universal.zip dist/UniversalControlHelper-macOS-universal.zip
+          cp release-feed/appcast.xml dist/appcast.xml
+          cp scripts/install.sh dist/install.sh
+          cd dist
+          shasum -a 256 UniversalControlHelper-macOS-universal.zip > SHA256SUMS
+
+      - name: Verify Sparkle signature
+        run: |
+          grep -q 'sparkle:edSignature=' dist/appcast.xml
+          grep -q "${{ steps.release.outputs.version }}" dist/appcast.xml
+
+      - name: Upload release candidate artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v6
+        with:
+          name: UniversalControlHelper-${{ steps.release.outputs.version }}-release-candidate
+          path: |
+            dist/UniversalControlHelper-macOS-universal.zip
+            dist/appcast.xml
+            dist/SHA256SUMS
+            dist/install.sh
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/UniversalControlHelper-macOS-universal.zip \
+            dist/appcast.xml \
+            dist/SHA256SUMS \
+            dist/install.sh \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md
+
+      - name: Delete temporary signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/developer-id.p12"

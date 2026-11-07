@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate installer and README assets
+        run: |
+          bash -n scripts/install.sh
+          zsh -n scripts/build-app.sh scripts/notarize-app.sh scripts/verify-release.sh
+          scripts/install.sh --help
+          xmllint --noout .github/assets/hero.svg
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+      - name: Build
+        run: ./scripts/build-app.sh
+      - name: Verify app bundle
+        run: ./scripts/verify-release.sh
