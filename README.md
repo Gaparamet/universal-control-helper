@@ -19,7 +19,7 @@
 > [!IMPORTANT]
 > **409 TH/ENG Edition** เป็นการดัดแปลงจาก [Universal Control Helper โดย feelgom](https://github.com/feelgom/universal-control-helper) เพื่อรองรับการใช้งาน **Thai ↔ English** และ UI ภาษาไทย/อังกฤษ ขอบคุณ [@feelgom](https://github.com/feelgom) สำหรับต้นฉบับโอเพนซอร์สภายใต้ [MIT License](LICENSE) (สงวนประกาศลิขสิทธิ์เดิม)
 >
-> **Release status:** ตอนจัดทำ README นี้ Repo 409 ยังไม่มีไฟล์แอปสำเร็จรูปที่เผยแพร่บน GitHub Releases หากต้องการรุ่น 409 ให้ Build จาก Source ก่อน อย่าสับสนกับ Release ของต้นฉบับ
+> **409 Release available:** [v1.5.3 — TH/ENG Edition](https://github.com/Gaparamet/universal-control-helper/releases/tag/v1.5.3) เผยแพร่ ZIP สำหรับ **macOS Apple Silicon (arm64)** แล้ว พร้อม SHA-256 บนหน้า Release ส่วนการอัปเดตผ่าน Sparkle และ `scripts/install.sh` ยังชี้ไปที่โปรเจกต์ต้นฉบับ (อ่านข้อควรระวังด้านล่าง)
 
 ## 🇹🇭 ทำไมต้องมีตัวนี้?
 
@@ -44,7 +44,31 @@ Physical Caps Lock ── Bonjour / LAN ──▶ Thai ↔ ABC
 
 ## ติดตั้งรุ่น 409
 
-### วิธีปัจจุบัน: Build จาก Source
+### ดาวน์โหลด v1.5.3 (409 TH/ENG Edition)
+
+**สำหรับ Mac ชิป Apple Silicon (M1 / M2 / M3 / M4)** ดาวน์โหลดจาก [409 GitHub Release v1.5.3](https://github.com/Gaparamet/universal-control-helper/releases/tag/v1.5.3):
+
+- [UniversalControlHelper-1.5.3-TH-ENG.zip](https://github.com/Gaparamet/universal-control-helper/releases/download/v1.5.3/UniversalControlHelper-1.5.3-TH-ENG.zip) — ไฟล์หลัก
+- [UniversalControlHelper-v1.5.3-macOS-arm64.zip](https://github.com/Gaparamet/universal-control-helper/releases/download/v1.5.3/UniversalControlHelper-v1.5.3-macOS-arm64.zip) — ชื่อไฟล์สำรอง (GitHub รายงาน SHA-256 ตรงกัน)
+
+ดาวน์โหลดและแตก ZIP แล้วลาก `Universal Control Helper.app` ไปที่ `/Applications` ทั้ง **MacBook (Source)** และ **Mac mini (Target)** จากนั้นเปิดแอปเพื่อตั้งค่าตามด้านล่าง
+
+**SHA-256 (ทั้งสอง ZIP ตามข้อมูล GitHub Release):**
+
+```text
+198e69a29092ed2af980d920dd14a74c3a06606ab3f48b662e4ee67fe854e7ed
+```
+
+ตรวจไฟล์ที่ดาวน์โหลดบน Mac:
+
+```bash
+shasum -a 256 ~/Downloads/UniversalControlHelper-1.5.3-TH-ENG.zip
+```
+
+> [!NOTE]
+> ไฟล์ Release นี้ประกาศเป็นรุ่น **arm64 / Apple Silicon**; ยังไม่มีหลักฐานว่า ZIP ดังกล่าวรองรับ Mac Intel หรือผ่าน Apple Notarization หาก macOS แจ้งเตือนความปลอดภัย ให้ตรวจแหล่งดาวน์โหลดและไฟล์ก่อนอนุญาตเปิดแอป
+
+### สำหรับนักพัฒนา: Build จาก Source
 
 ต้องใช้ macOS 13+ และเครื่องมือ Xcode / Swift สำหรับ Build แอป macOS
 
@@ -60,10 +84,10 @@ open "dist/Universal Control Helper.app"
 
 เมื่อทดสอบเรียบร้อย สามารถย้าย `dist/Universal Control Helper.app` ไปยัง `/Applications` ด้วย Finder ได้ แอปที่ Build เองอาจใช้การลงนามแบบ ad-hoc และยังไม่ใช่แอปที่ Apple notarize
 
-**ต้องการตัวติดตั้งสำเร็จรูป?** ติดตามได้ที่ [409 GitHub Releases](https://github.com/Gaparamet/universal-control-helper/releases) — จะมีปุ่มดาวน์โหลดเมื่อมี Release ของ 409 ที่ Build และตรวจสอบแล้วจริง ๆ
+**ต้องการไฟล์แอปสำหรับ Apple Silicon?** ใช้ ZIP ของ [409 Release v1.5.3](https://github.com/Gaparamet/universal-control-helper/releases/tag/v1.5.3) ด้านบน ส่วนการ Build จาก Source เป็นทางเลือกสำหรับนักพัฒนา
 
 > [!WARNING]
-> **อย่ารัน `scripts/install.sh` เพื่อหวังติดตั้งรุ่น 409 ในตอนนี้** — ตัวติดตั้งใน Source ปัจจุบันยังดาวน์โหลดไฟล์จาก `feelgom/universal-control-helper` (ต้นฉบับ) และ `Resources/Info.plist` ยังตั้งค่า Sparkle Update Feed ของต้นฉบับไว้เช่นกัน ก่อนเผยแพร่ Binary ของ 409 ต้องจัดการสองจุดนี้และทดสอบกระบวนการอัปเดตแยกต่างหาก
+> **ดาวน์โหลดรุ่น 409 จาก Release ZIP โดยตรง** — ตัวติดตั้ง `scripts/install.sh` ใน Source ปัจจุบันยังดาวน์โหลดไฟล์จาก `feelgom/universal-control-helper` (ต้นฉบับ) และ `Resources/Info.plist` ยังตั้งค่า Sparkle Update Feed ของต้นฉบับอยู่ โปรดอย่าใช้สองช่องทางนั้นเพื่อดาวน์โหลด/อัปเดต 409 Edition จนกว่าจะปรับและทดสอบแยกต่างหาก
 
 ### ตั้งค่าบน Mac ทั้งสองเครื่อง
 
@@ -98,7 +122,7 @@ open "dist/Universal Control Helper.app"
 
 **Requirements:** macOS 13+, the app installed on both Macs, Universal Control enabled, a shared trusted LAN, Source Input Monitoring permission, and matching 6-digit pairing codes. Both Macs need relevant input sources configured. This is **not an Apple product** and is not affiliated with or endorsed by Apple.
 
-**Binary status:** A 409-built installer has not yet been published. Build from source using the commands above. The checked-in installer and Sparkle update URL currently reference the original upstream repository; do **not** treat them as 409 update/download channels.
+**Binary status:** 409 v1.5.3 arm64 ZIPs are now available from the [409 release page](https://github.com/Gaparamet/universal-control-helper/releases/tag/v1.5.3), with SHA-256 published there. The checked-in installer and Sparkle update URL still reference the original upstream project; **do not use them as 409 download/update channels**. Notarization has not been verified here.
 
 ## Development & attribution
 
