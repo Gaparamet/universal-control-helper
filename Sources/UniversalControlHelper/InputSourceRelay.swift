@@ -171,17 +171,75 @@ private func inputSourceChangedCallback(
 }
 
 enum TargetInputInjector {
+    static var shouldPreventCapsLock: () -> Bool = { true }
+
     static func handle(_ message: RelayMessage) {
         switch message.kind {
         case .toggleInputSource:
             InputSourceController.toggleInputSource()
+            if shouldPreventCapsLock() {
+                CapsLockManager.suppressCapsLock()
+            }
         case .setInputSource:
             guard let inputSource = message.inputSource else { return }
             InputSourceController.select(inputSource)
+            if shouldPreventCapsLock() {
+                CapsLockManager.suppressCapsLock()
+            }
         case .hello, .helloAck:
             break
         }
     }
+}
+
+final class TargetCapsLockGuard {
+    private var isStarted = false
+    var isEnabled: () -> Bool = { true }
+
+    func start() {
+        guard !isStarted else { return }
+        isStarted = true
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDistributedCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            targetInputSourceChangedCallback,
+            kTISNotifySelectedKeyboardInputSourceChanged,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    func stop() {
+        guard isStarted else { return }
+        CFNotificationCenterRemoveObserver(
+            CFNotificationCenterGetDistributedCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            CFNotificationName(kTISNotifySelectedKeyboardInputSourceChanged),
+            nil
+        )
+        isStarted = false
+    }
+
+    fileprivate func inputSourceDidChange() {
+        guard isEnabled() else { return }
+        CapsLockManager.suppressCapsLock()
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+private func targetInputSourceChangedCallback(
+    _: CFNotificationCenter?,
+    observer: UnsafeMutableRawPointer?,
+    _: CFNotificationName?,
+    _: UnsafeRawPointer?,
+    _: CFDictionary?
+) {
+    guard let observer else { return }
+    let guardInstance = Unmanaged<TargetCapsLockGuard>.fromOpaque(observer).takeUnretainedValue()
+    guardInstance.inputSourceDidChange()
 }
 
 enum InputSourceController {

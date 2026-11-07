@@ -26,6 +26,7 @@ final class Preferences {
         static let pairingCode = "pairingCode"
         static let helperEnabled = "helperEnabled"
         static let appLanguage = "appLanguage"
+        static let preventTargetCapsLock = "preventTargetCapsLock"
     }
 
     private let defaults: UserDefaults
@@ -40,6 +41,9 @@ final class Preferences {
         }
         if defaults.string(forKey: Key.appLanguage) == nil {
             defaults.set(AppLanguage.th.rawValue, forKey: Key.appLanguage)
+        }
+        if defaults.object(forKey: Key.preventTargetCapsLock) == nil {
+            defaults.set(true, forKey: Key.preventTargetCapsLock)
         }
         if let code = defaults.string(forKey: Key.pairingCode), PairingCode.isValid(code) {
             return
@@ -75,6 +79,18 @@ final class Preferences {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.appLanguage)
+        }
+    }
+
+    var preventTargetCapsLock: Bool {
+        get {
+            if defaults.object(forKey: Key.preventTargetCapsLock) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.preventTargetCapsLock)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.preventTargetCapsLock)
         }
     }
 }

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sourceClient: SourceClient?
     private var inputSourceRelay: InputSourceRelay?
     private var physicalCapsLockMonitor: PhysicalCapsLockMonitor?
+    private var targetCapsLockGuard: TargetCapsLockGuard?
     private var settingsController: SettingsWindowController?
     private var updaterReadinessObservation: NSKeyValueObservation?
     private var connectionStatus: ConnectionStatus = .starting
@@ -59,6 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inputSourceRelay = nil
         physicalCapsLockMonitor?.stop()
         physicalCapsLockMonitor = nil
+        targetCapsLockGuard?.stop()
+        targetCapsLockGuard = nil
         inputMonitoringReady = preferences.role == .target
 
         guard preferences.helperEnabled else {
@@ -94,6 +97,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .target:
             let server = TargetServer { [weak self] in self?.preferences.pairingCode ?? "" }
+            TargetInputInjector.shouldPreventCapsLock = { [weak self] in
+                self?.preferences.preventTargetCapsLock ?? true
+            }
             server.messageReceived = { message in TargetInputInjector.handle(message) }
             server.statusDidChange = { [weak self] status in
                 self?.connectionStatus = status
@@ -101,6 +107,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             transport = server
             server.start()
+
+            let capsGuard = TargetCapsLockGuard()
+            capsGuard.isEnabled = { [weak self] in
+                self?.preferences.preventTargetCapsLock ?? true
+            }
+            capsGuard.start()
+            targetCapsLockGuard = capsGuard
         }
 
         refreshInterface()
@@ -126,7 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentVersion: displayedVersion,
             canCheckForUpdates: updaterController.updater.canCheckForUpdates,
             launchAtLoginState: LaunchAtLogin.state,
-            language: preferences.language
+            language: preferences.language,
+            preventTargetCapsLock: preferences.preventTargetCapsLock
         )
     }
 
@@ -324,6 +338,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.languageDidChange = { [weak self] lang in
             self?.setLanguage(lang)
         }
+        controller.preventTargetCapsLockDidChange = { [weak self] enabled in
+            self?.preferences.preventTargetCapsLock = enabled
+        }
         controller.windowDidClose = {
             NSApp.setActivationPolicy(.accessory)
         }
@@ -392,6 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        targetCapsLockGuard?.stop()
         physicalCapsLockMonitor?.stop()
         inputSourceRelay?.stop()
         transport?.stop()

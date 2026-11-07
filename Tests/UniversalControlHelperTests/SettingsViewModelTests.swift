@@ -119,10 +119,25 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(selected, .th)
     }
 
+    func testPreventTargetCapsLockToggle() {
+        let model = SettingsViewModel()
+        var changedValue: Bool?
+        model.preventTargetCapsLockDidChange = { changedValue = $0 }
+
+        model.setPreventTargetCapsLock(false)
+        XCTAssertFalse(model.preventTargetCapsLock)
+        XCTAssertEqual(changedValue, false)
+
+        model.setPreventTargetCapsLock(true)
+        XCTAssertTrue(model.preventTargetCapsLock)
+        XCTAssertEqual(changedValue, true)
+    }
+
     private func snapshot(
         pairingCode: String,
         status: ConnectionStatus = .searchingTarget,
-        language: AppLanguage = .th
+        language: AppLanguage = .th,
+        preventTargetCapsLock: Bool = true
     ) -> SettingsSnapshot {
         SettingsSnapshot(
             role: .source,
@@ -130,10 +145,11 @@ final class SettingsViewModelTests: XCTestCase {
             connectionStatus: status,
             inputMonitoringReady: false,
             helperEnabled: true,
-            currentVersion: "1.5.3",
+            currentVersion: "1.5.4",
             canCheckForUpdates: true,
             launchAtLoginState: .disabled,
-            language: language
+            language: language,
+            preventTargetCapsLock: preventTargetCapsLock
         )
     }
 }

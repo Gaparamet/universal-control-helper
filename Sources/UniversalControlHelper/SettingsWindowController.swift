@@ -11,6 +11,7 @@ struct SettingsSnapshot {
     let canCheckForUpdates: Bool
     let launchAtLoginState: LaunchAtLoginState
     let language: AppLanguage
+    let preventTargetCapsLock: Bool
 }
 
 public enum PairingCodeFeedbackKey: Equatable {
@@ -45,6 +46,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var pairingCodeFeedbackKey: PairingCodeFeedbackKey?
     @Published var pairingCodeIsValid = true
     @Published private(set) var language: AppLanguage = .th
+    @Published private(set) var preventTargetCapsLock = true
     private var pairingCodeIsDirty = false
 
     var roleDidChange: ((ComputerRole) -> Void)?
@@ -56,6 +58,7 @@ final class SettingsViewModel: ObservableObject {
     var updateCheckRequested: (() -> Void)?
     var launchAtLoginDidChange: ((Bool) -> LaunchAtLoginChangeResult)?
     var languageDidChange: ((AppLanguage) -> Void)?
+    var preventTargetCapsLockDidChange: ((Bool) -> Void)?
 
     func update(snapshot: SettingsSnapshot) {
         role = snapshot.role
@@ -69,7 +72,13 @@ final class SettingsViewModel: ObservableObject {
         currentVersion = snapshot.currentVersion
         canCheckForUpdates = snapshot.canCheckForUpdates
         language = snapshot.language
+        preventTargetCapsLock = snapshot.preventTargetCapsLock
         applyLaunchAtLoginState(snapshot.launchAtLoginState)
+    }
+
+    func setPreventTargetCapsLock(_ enabled: Bool) {
+        preventTargetCapsLock = enabled
+        preventTargetCapsLockDidChange?(enabled)
     }
 
     func selectLanguage(_ newLanguage: AppLanguage) {
@@ -162,6 +171,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var updateCheckRequested: (() -> Void)?
     var launchAtLoginDidChange: ((Bool) -> LaunchAtLoginChangeResult)?
     var languageDidChange: ((AppLanguage) -> Void)?
+    var preventTargetCapsLockDidChange: ((Bool) -> Void)?
     var windowDidClose: (() -> Void)?
 
     private let model = SettingsViewModel()
@@ -208,6 +218,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         model.languageDidChange = { [weak self] lang in
             self?.window?.title = L10n.string(.settingsWindowTitle, language: lang)
             self?.languageDidChange?(lang)
+        }
+        model.preventTargetCapsLockDidChange = { [weak self] enabled in
+            self?.preventTargetCapsLockDidChange?(enabled)
         }
     }
 
@@ -391,6 +404,22 @@ private struct SettingsView: View {
                 )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Divider()
+
+                Toggle(
+                    isOn: Binding(
+                        get: { model.preventTargetCapsLock },
+                        set: { model.setPreventTargetCapsLock($0) }
+                    )
+                ) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.string(.preventTargetCapsLockTitle, language: model.language))
+                        Text(L10n.string(.preventTargetCapsLockSubtitle, language: model.language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(8)
         }

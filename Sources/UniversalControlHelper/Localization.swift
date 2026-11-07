@@ -218,6 +218,8 @@ public enum L10n {
         case menuLanguage
         case menuCloseWindow
         case menuQuit
+        case preventTargetCapsLockTitle
+        case preventTargetCapsLockSubtitle
         case alertResetTitle
         case alertResetMessage
         case btnReset
@@ -329,6 +331,10 @@ public enum L10n {
                 return "ปิดหน้าต่าง"
             case .menuQuit:
                 return "ออกจาก Universal Control Helper"
+            case .preventTargetCapsLockTitle:
+                return "ป้องกัน Caps Lock ค้างบน Mac ปลายทาง (Target)"
+            case .preventTargetCapsLockSubtitle:
+                return "ปิดสถานะ Caps Lock อัตโนมัติเมื่อมีการสลับภาษา เพื่อไม่ให้ติดตัวพิมพ์ใหญ่ตลอดเวลา"
             case .alertResetTitle:
                 return "ต้องการลงทะเบียนสิทธิ์การตรวจสอบการป้อนข้อมูลใหม่หรือไม่?"
             case .alertResetMessage:
@@ -446,6 +452,10 @@ public enum L10n {
                 return "Close Window"
             case .menuQuit:
                 return "Quit Universal Control Helper"
+            case .preventTargetCapsLockTitle:
+                return "Prevent stuck Caps Lock on Target Mac"
+            case .preventTargetCapsLockSubtitle:
+                return "Automatically disengages Caps Lock when switching languages to prevent uppercase lock."
             case .alertResetTitle:
                 return "Reset Input Monitoring permission entry?"
             case .alertResetMessage:

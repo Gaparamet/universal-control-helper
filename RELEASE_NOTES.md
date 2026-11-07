@@ -1,10 +1,22 @@
+# Universal Control Helper — 409 Edition (v1.5.4)
+
+A Thai / English adaptation of [feelgom/universal-control-helper](https://github.com/feelgom/universal-control-helper), maintained by [Gaparamet](https://github.com/Gaparamet) (409 Collective).
+
+## What's New in v1.5.4 / มีอะไรใหม่ใน v1.5.4
+
+- 🔒 **Fix Target Mac Caps Lock Stuck / แก้ปัญหา Caps Lock ค้างบนเครื่อง Target:**
+  - แก้ไขปัญหาบั๊กที่เมื่อกดสลับภาษาข้ามเครื่องผ่าน Universal Control แล้วสัญญาณ Caps Lock บนเครื่อง Target จะติดค้าง ทำให้พิมพ์ตัวอักษรเป็นพิมพ์ใหญ่ (UPPERCASE) หรือติดตัว Shift ตลอดเวลา
+  - เพิ่มโมดูล `CapsLockManager` ควบคุมการปลดล็อก `kIOHIDCapsLockState` อัตโนมัติทันทีที่มีการสลับภาษา พร้อมระบบ Staggered suppression ป้องกันสัญญาณดีเลย์จาก Universal Control
+  - เพิ่ม `TargetCapsLockGuard` เฝ้าระวังการเปลี่ยนภาษาบนเครื่อง Target เพื่อดับสถานะ Caps Lock ค้างทันที
+  - เพิ่มการตั้งค่า **"ป้องกัน Caps Lock ค้างบน Mac ปลายทาง (Target)"** สามารถเปิด/ปิดได้จากหน้าต่างตั้งค่า
+
+---
+
 # Universal Control Helper — 409 TH/ENG Edition (v1.5.3)
 
-A Thai / English adaptation of [feelgom/universal-control-helper](https://github.com/feelgom/universal-control-helper), maintained in the [409 repository](https://github.com/Gaparamet/universal-control-helper).
+## Features / ฟีเจอร์หลัก
 
-## What's included / มีอะไรใหม่
-
-- 🇹🇭 Thai ↔ English keyboard input source support, including macOS Thai layouts and ABC / U.S.
+- 🇹🇭 🇬🇧 Thai ↔ English keyboard input source support, including macOS Thai layouts and ABC / U.S.
 - ⇪ Physical Caps Lock detection on the Source Mac, with input switching relayed to the Target Mac during Universal Control use.
 - 🔄 Supported input-source state synchronization when both Macs run compatible builds.
 - 🌐 Settings and menu-bar interface localization in Thai and English.
