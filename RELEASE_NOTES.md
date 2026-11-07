@@ -1,10 +1,29 @@
-# Universal Control Helper 1.5.3
+# Universal Control Helper — 409 TH/ENG Edition (v1.5.3)
 
-- Universal Control로 입력이 Target에 전달될 때 Source의 입력 소스 변경 알림이 발생하지 않아 Caps Lock이 동작하지 않던 v1.5.0 회귀를 수정했습니다.
-- Source에서 물리 Caps Lock을 다시 감지하되 키 입력은 차단하지 않고 Target에 전환 신호만 전달합니다.
-- 새 버전끼리는 Source의 ABC/두벌식 상태 동기화도 함께 사용해 두 Mac의 상태가 어긋난 경우 자동으로 바로잡습니다.
-- 구버전 Target에는 상태 메시지를 중복 전송하지 않아 Caps Lock이 두 번 전환되는 문제를 방지합니다.
-- 입력 모니터링 권한은 키보드가 연결된 Source Mac에만 필요하며 Target에는 필요하지 않습니다.
-- 기존 ad-hoc 빌드의 권한 스위치가 켜져 있어도 현재 빌드가 미허용인 경우를 위해 Source 설정에 **권한 항목 재등록…** 복구 동작을 추가했습니다.
-- 권한 항목 재등록 후 macOS 입력 모니터링 승인 요청을 위해 Core Graphics 권한 요청을 함께 사용합니다.
-- 권한 목록에 앱이 자동으로 나타나지 않는 macOS 환경을 위해 직접 추가하는 안내와 **앱 위치 보기**를 제공합니다.
+A Thai / English adaptation of [feelgom/universal-control-helper](https://github.com/feelgom/universal-control-helper), maintained in the [409 repository](https://github.com/Gaparamet/universal-control-helper).
+
+## What's included / มีอะไรใหม่
+
+- 🇹🇭 Thai ↔ English keyboard input source support, including macOS Thai layouts and ABC / U.S.
+- ⇪ Physical Caps Lock detection on the Source Mac, with input switching relayed to the Target Mac during Universal Control use.
+- 🔄 Supported input-source state synchronization when both Macs run compatible builds.
+- 🌐 Settings and menu-bar interface localization in Thai and English.
+- 🔗 Bonjour local-network discovery with 6-digit pairing code.
+- 🇰🇷 Compatibility path for the upstream Korean 2-set input source.
+
+## Setup / วิธีเริ่มใช้งาน
+
+Install the application on **both Macs**. Enable Universal Control and connect to the same **trusted local network**. Choose Source on the Mac with the physical keyboard and Target on the other Mac, enter the Source's 6-digit pairing code on Target, and allow **Input Monitoring on Source** and **Local Network on both**.
+
+Requires **macOS 13+** and suitable keyboard input sources configured on the Target (e.g., ABC and Thai).
+
+## Important limitations / ข้อควรทราบ
+
+- The pairing code is not end-to-end encryption. **Do not use on untrusted networks.**
+- Source requires Input Monitoring permission; Target does not require Input Monitoring for this feature.
+- The app's current `scripts/install.sh` still points to **feelgom's upstream release assets**. The Sparkle feed in `Resources/Info.plist` still points upstream too. **Do not present those as 409 download/update channels.** A self-contained 409 distribution requires retargeting, signing/key management, and verification.
+- Check the assets on this exact release before claiming there is a 409-built downloadable app, SHA-256 checksums, notarization, or an update feed. Source code alone does not establish those properties.
+
+## Credits
+
+Original project © 2026 Yoonsung Ji ([@feelgom](https://github.com/feelgom)) under the [MIT License](LICENSE). 409 TH/ENG adaptation by [Gaparamet](https://github.com/Gaparamet) / 409 Collective. Not affiliated with Apple.
