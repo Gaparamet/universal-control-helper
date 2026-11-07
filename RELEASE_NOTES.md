@@ -22,7 +22,8 @@ Requires **macOS 13+** and suitable keyboard input sources configured on the Tar
 - The pairing code is not end-to-end encryption. **Do not use on untrusted networks.**
 - Source requires Input Monitoring permission; Target does not require Input Monitoring for this feature.
 - The app's current `scripts/install.sh` still points to **feelgom's upstream release assets**. The Sparkle feed in `Resources/Info.plist` still points upstream too. **Do not present those as 409 download/update channels.** A self-contained 409 distribution requires retargeting, signing/key management, and verification.
-- Check the assets on this exact release before claiming there is a 409-built downloadable app, SHA-256 checksums, notarization, or an update feed. Source code alone does not establish those properties.
+- **409 v1.5.3 ZIP release is published:** [Release and assets](https://github.com/Gaparamet/universal-control-helper/releases/tag/v1.5.3). Both ZIP assets are listed by GitHub with SHA-256 `198e69a29092ed2af980d920dd14a74c3a06606ab3f48b662e4ee67fe854e7ed`.
+- GitHub Actions CI on main [run #42350880355](https://github.com/Gaparamet/universal-control-helper/actions/runs/42350880355) completed successfully (Test, Build, Verify app bundle). **This does not by itself verify Apple notarization, independent artifact reproducibility, or a functioning 409 Sparkle feed.**
 
 ## Credits
 
