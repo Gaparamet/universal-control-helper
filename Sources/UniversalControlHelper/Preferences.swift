@@ -27,6 +27,7 @@ final class Preferences {
         static let helperEnabled = "helperEnabled"
         static let appLanguage = "appLanguage"
         static let preventTargetCapsLock = "preventTargetCapsLock"
+        static let hasShownSettingsOnce = "hasShownSettingsOnce"
     }
 
     private let defaults: UserDefaults
@@ -80,6 +81,11 @@ final class Preferences {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appLanguage)
         }
+    }
+
+    var hasShownSettingsOnce: Bool {
+        get { defaults.bool(forKey: Key.hasShownSettingsOnce) }
+        set { defaults.set(newValue, forKey: Key.hasShownSettingsOnce) }
     }
 
     var preventTargetCapsLock: Bool {
