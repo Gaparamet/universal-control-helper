@@ -59,11 +59,12 @@ public enum InputSourceSelection {
     ) -> String? {
         switch state {
         case .abc:
-            return candidates.first { $0.id == "com.apple.keylayout.ABC" }?.id
-                ?? candidates.first { $0.name.caseInsensitiveCompare("ABC") == .orderedSame }?.id
-                ?? candidates.first { $0.id == "com.apple.keylayout.US" }?.id
-                ?? candidates.first { $0.name.caseInsensitiveCompare("U.S.") == .orderedSame }?.id
-                ?? candidates.first { $0.id.lowercased().contains("keylayout.us") }?.id
+            if let id = candidates.first(where: { $0.id == "com.apple.keylayout.ABC" })?.id { return id }
+            if let id = candidates.first(where: { $0.name.caseInsensitiveCompare("ABC") == .orderedSame })?.id { return id }
+            if let id = candidates.first(where: { $0.id == "com.apple.keylayout.US" })?.id { return id }
+            if let id = candidates.first(where: { $0.name.caseInsensitiveCompare("U.S.") == .orderedSame })?.id { return id }
+            if let id = candidates.first(where: { $0.id.lowercased().contains("keylayout.us") })?.id { return id }
+            return candidates.first { InputSourceSelection.state(id: $0.id, name: $0.name) == .abc }?.id
         case .thai:
             return candidates.first {
                 let id = $0.id.lowercased()
@@ -72,7 +73,7 @@ public enum InputSourceSelection {
                 let id = $0.id.lowercased()
                 let name = $0.name.lowercased()
                 return id.contains("thai") || name.contains("thai") || name.contains("ไทย")
-            }?.id
+            }?.id ?? candidates.first { InputSourceSelection.state(id: $0.id, name: $0.name) == .thai }?.id
         case .korean:
             return candidates.first {
                 let id = $0.id.lowercased()
@@ -80,7 +81,7 @@ public enum InputSourceSelection {
             }?.id ?? candidates.first {
                 let id = $0.id.lowercased()
                 return id.contains("korean") || id.contains("hangul")
-            }?.id
+            }?.id ?? candidates.first { InputSourceSelection.state(id: $0.id, name: $0.name) == .korean }?.id
         }
     }
 
@@ -88,7 +89,8 @@ public enum InputSourceSelection {
         currentID: String,
         candidates: [InputSourceDescriptor]
     ) -> String? {
-        let currentState = state(id: currentID)
+        let currentName = candidates.first { $0.id == currentID }?.name ?? ""
+        let currentState = state(id: currentID, name: currentName)
         let targetState: InputSourceState
         if currentState == .abc {
             // If current is ABC, toggle to Thai (or Korean if user has Korean candidates)
