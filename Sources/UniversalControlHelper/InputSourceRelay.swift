@@ -65,10 +65,12 @@ final class PhysicalCapsLockMonitor {
     private func handle(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
         guard isPhysicalDevice(IOHIDElementGetDevice(element)) else { return }
-        guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad),
-              IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock) else {
+        guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad) else { return }
+        if Diag.probeEnabled, IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardDeleteOrBackspace) {
+            Diag.keys.notice("SRC delete \(IOHIDValueGetIntegerValue(value) == 1 ? "down" : "up", privacy: .public)")
             return
         }
+        guard IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock) else { return }
         switch IOHIDValueGetIntegerValue(value) {
         case 1:
             Diag.relay.notice("SRC capsDown current=\(InputSourceController.currentState?.rawValue ?? "nil", privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")

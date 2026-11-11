@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inputSourceRelay: InputSourceRelay?
     private var physicalCapsLockMonitor: PhysicalCapsLockMonitor?
     private var targetCapsLockGuard: TargetCapsLockGuard?
+    private var keyProbe: KeyProbe?
     private var settingsController: SettingsWindowController?
     private var updaterReadinessObservation: NSKeyValueObservation?
     private var connectionStatus: ConnectionStatus = .starting
@@ -68,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         physicalCapsLockMonitor = nil
         targetCapsLockGuard?.stop()
         targetCapsLockGuard = nil
+        keyProbe?.stop()
+        keyProbe = nil
         inputMonitoringReady = preferences.role == .target
 
         guard preferences.helperEnabled else {
@@ -120,6 +123,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             capsGuard.start()
             targetCapsLockGuard = capsGuard
+
+            let probe = KeyProbe()
+            probe.start()
+            keyProbe = probe
         }
 
         refreshInterface()
