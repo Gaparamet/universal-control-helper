@@ -53,6 +53,9 @@ final class SourceClient: RelayTransport {
     var authenticationDidComplete: ((Int) -> Void)?
 
     private static let authTimeout: TimeInterval = 3
+    /// Whole-attempt deadline. `connectionTimeout` only covers the TCP handshake, so an
+    /// attempt stuck in `.preparing` (e.g. Bonjour resolution) would otherwise hang forever.
+    private static let attemptTimeout: TimeInterval = 8
     private static let initialRetryDelay: TimeInterval = 1
     private static let maximumRetryDelay: TimeInterval = 5
     private static let rejectionsBeforeMismatch = 2
@@ -73,6 +76,7 @@ final class SourceClient: RelayTransport {
     private var retryDelay = SourceClient.initialRetryDelay
     private var retryWorkItem: DispatchWorkItem?
     private var authTimeoutWorkItem: DispatchWorkItem?
+    private var attemptTimeoutWorkItem: DispatchWorkItem?
     /// Per-attempt flags.
     private var helloSent = false
     private var cancelledLocally = false
@@ -133,6 +137,8 @@ final class SourceClient: RelayTransport {
         retryWorkItem = nil
         authTimeoutWorkItem?.cancel()
         authTimeoutWorkItem = nil
+        attemptTimeoutWorkItem?.cancel()
+        attemptTimeoutWorkItem = nil
         browser?.cancel()
         browser = nil
         let oldConnection = connection
@@ -227,7 +233,21 @@ final class SourceClient: RelayTransport {
                 break
             }
         }
+        scheduleAttemptTimeout(for: connection)
         connection.start(queue: queue)
+    }
+
+    private func scheduleAttemptTimeout(for connection: NWConnection) {
+        attemptTimeoutWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self, weak connection] in
+            guard let self, let connection, self.isRunning,
+                  self.connection === connection, !self.authenticated else { return }
+            netLog.notice("source: attempt not authenticated within \(Self.attemptTimeout, privacy: .public)s; cancelling")
+            self.cancelledLocally = true
+            connection.cancel()
+        }
+        attemptTimeoutWorkItem = item
+        queue.asyncAfter(deadline: .now() + Self.attemptTimeout, execute: item)
     }
 
     private func scheduleAuthTimeout(for connection: NWConnection) {
@@ -291,6 +311,8 @@ final class SourceClient: RelayTransport {
         retryDelay = Self.initialRetryDelay
         authTimeoutWorkItem?.cancel()
         authTimeoutWorkItem = nil
+        attemptTimeoutWorkItem?.cancel()
+        attemptTimeoutWorkItem = nil
         netLog.notice("source: authenticated, peer protocol v\(protocolVersion, privacy: .public)")
         report(.connectedSyncing)
         let generation = runningGeneration
@@ -312,6 +334,8 @@ final class SourceClient: RelayTransport {
         guard connection === candidate else { return }
         authTimeoutWorkItem?.cancel()
         authTimeoutWorkItem = nil
+        attemptTimeoutWorkItem?.cancel()
+        attemptTimeoutWorkItem = nil
         let wasAuthenticated = authenticated
         connection = nil
         candidate.cancel()

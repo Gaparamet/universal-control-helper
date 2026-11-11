@@ -107,7 +107,7 @@ enum SourceCapsLockNeutralizer {
     static var isEnabled: () -> Bool = {
         UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
     }
-    static var delays: [TimeInterval] = [0, 0.03, 0.12]
+    static var delays: [TimeInterval] = [0, 0.008, 0.016, 0.03, 0.06, 0.12]
 
     private static var pending: [DispatchWorkItem] = []
 
@@ -135,7 +135,7 @@ enum SourceCapsLockNeutralizer {
         isEnabled = {
             UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
         }
-        delays = [0, 0.03, 0.12]
+        delays = [0, 0.008, 0.016, 0.03, 0.06, 0.12]
     }
 
     private static func run(reason: String, delay: TimeInterval) {
