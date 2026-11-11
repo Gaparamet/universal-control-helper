@@ -66,12 +66,20 @@ final class PhysicalCapsLockMonitor {
         let element = IOHIDValueGetElement(value)
         guard isPhysicalDevice(IOHIDElementGetDevice(element)) else { return }
         guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad),
-              IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock),
-              IOHIDValueGetIntegerValue(value) == 1 else {
+              IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock) else {
             return
         }
-        Diag.relay.notice("SRC capsDown current=\(InputSourceController.currentState?.rawValue ?? "nil", privacy: .public)")
-        onCapsLockPressed?()
+        switch IOHIDValueGetIntegerValue(value) {
+        case 1:
+            Diag.relay.notice("SRC capsDown current=\(InputSourceController.currentState?.rawValue ?? "nil", privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            onCapsLockPressed?()
+            SourceCapsLockNeutralizer.schedule(reason: "down")
+        case 0:
+            Diag.relay.notice("SRC capsUp caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            SourceCapsLockNeutralizer.schedule(reason: "up")
+        default:
+            return
+        }
     }
 
     private func isPhysicalDevice(_ device: IOHIDDevice?) -> Bool {
@@ -89,6 +97,52 @@ final class PhysicalCapsLockMonitor {
 
     deinit {
         stop()
+    }
+}
+
+/// Experiment: while Universal Control forwards the Source keyboard, a physical Caps Lock press
+/// toggles the real Caps Lock on the Source and UC re-applies it on the Target. Clear it on the
+/// Source right after each press/release. Runs on the main thread.
+enum SourceCapsLockNeutralizer {
+    static var isEnabled: () -> Bool = {
+        UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
+    }
+    static var delays: [TimeInterval] = [0, 0.03, 0.12]
+
+    private static var pending: [DispatchWorkItem] = []
+
+    static func schedule(reason: String) {
+        guard isEnabled() else { return }
+        cancel()
+        for delay in delays {
+            if delay <= 0 {
+                run(reason: reason, delay: delay)
+            } else {
+                let item = DispatchWorkItem { run(reason: reason, delay: delay) }
+                pending.append(item)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+            }
+        }
+    }
+
+    static func cancel() {
+        pending.forEach { $0.cancel() }
+        pending.removeAll()
+    }
+
+    internal static func reset() {
+        cancel()
+        isEnabled = {
+            UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
+        }
+        delays = [0, 0.03, 0.12]
+    }
+
+    private static func run(reason: String, delay: TimeInterval) {
+        guard CapsLockManager.isCapsLockOn else { return }
+        let ms = Int((delay * 1000).rounded())
+        Diag.caps.notice("SRC neutralize reason=\(reason, privacy: .public) +\(ms, privacy: .public)ms")
+        _ = CapsLockManager.disableCapsLock()
     }
 }
 
