@@ -1,155 +1,157 @@
-import XCTest
+import Testing
 @testable import UniversalControlHelper
 
-@MainActor
-final class SettingsViewModelTests: XCTestCase {
-    func testUnsavedPairingCodeSurvivesStatusRefresh() {
-        let model = SettingsViewModel()
-        model.update(snapshot: snapshot(pairingCode: "123456"))
+extension HelperSerialTests {
+    @MainActor
+    @Suite struct SettingsViewModelTests {
+        @Test func unsavedPairingCodeSurvivesStatusRefresh() {
+            let model = SettingsViewModel()
+            model.update(snapshot: snapshot(pairingCode: "123456"))
 
-        model.editPairingCode("654")
-        model.update(snapshot: snapshot(pairingCode: "123456", status: .connectedSyncing))
+            model.editPairingCode("654")
+            model.update(snapshot: snapshot(pairingCode: "123456", status: .connectedSyncing))
 
-        XCTAssertEqual(model.pairingCode, "654")
-    }
-
-    func testInvalidPairingCodeShowsValidationFeedback() {
-        let model = SettingsViewModel()
-        model.update(snapshot: snapshot(pairingCode: "123456"))
-        model.pairingCodeDidChange = { _ in false }
-
-        model.editPairingCode("123")
-        model.applyPairingCode()
-
-        XCTAssertFalse(model.pairingCodeIsValid)
-        XCTAssertEqual(model.pairingCodeFeedbackKey, .invalid)
-        XCTAssertEqual(model.pairingCode, "123")
-    }
-
-    func testAppliedPairingCodeAcceptsFutureSnapshots() {
-        let model = SettingsViewModel()
-        model.update(snapshot: snapshot(pairingCode: "123456"))
-        model.pairingCodeDidChange = { $0 == "654321" }
-
-        model.editPairingCode("654321")
-        model.applyPairingCode()
-        model.update(snapshot: snapshot(pairingCode: "111111"))
-
-        XCTAssertTrue(model.pairingCodeIsValid)
-        XCTAssertEqual(model.pairingCode, "111111")
-    }
-
-    func testSourceCanRegeneratePairingCode() {
-        let model = SettingsViewModel()
-        model.update(snapshot: snapshot(pairingCode: "123456"))
-        model.pairingCodeRegenerationRequested = { "654321" }
-
-        model.regeneratePairingCode()
-
-        XCTAssertEqual(model.pairingCode, "654321")
-        XCTAssertEqual(model.pairingCodeFeedbackKey, .regenerated)
-    }
-
-    func testUpdateCheckInvokesCallback() {
-        let model = SettingsViewModel()
-        var updateCheckRequested = false
-        model.updateCheckRequested = { updateCheckRequested = true }
-
-        model.checkForUpdates()
-
-        XCTAssertTrue(updateCheckRequested)
-    }
-
-    func testPermissionRefreshUsesPhysicalMonitorResult() {
-        let model = SettingsViewModel()
-        model.update(snapshot: snapshot(pairingCode: "123456"))
-        model.permissionRefreshRequested = { true }
-
-        model.refreshInputMonitoring()
-
-        XCTAssertTrue(model.inputMonitoringReady)
-    }
-
-    func testPermissionResetInvokesRecoveryCallback() {
-        let model = SettingsViewModel()
-        var resetRequested = false
-        model.permissionResetRequested = { resetRequested = true }
-
-        model.resetInputMonitoring()
-
-        XCTAssertTrue(resetRequested)
-    }
-
-    func testHelperEnabledInvokesCallback() {
-        let model = SettingsViewModel()
-        var requestedValue: Bool?
-        model.helperEnabledDidChange = { requestedValue = $0 }
-
-        model.setHelperEnabled(false)
-
-        XCTAssertFalse(model.helperEnabled)
-        XCTAssertEqual(requestedValue, false)
-    }
-
-    func testLaunchAtLoginUsesActualResult() {
-        let model = SettingsViewModel()
-        model.launchAtLoginDidChange = { requested in
-            XCTAssertTrue(requested)
-            return LaunchAtLoginChangeResult(state: .requiresApproval, feedbackKey: .requiresApproval)
+            #expect(model.pairingCode == "654")
         }
 
-        model.setLaunchAtLogin(true)
+        @Test func invalidPairingCodeShowsValidationFeedback() {
+            let model = SettingsViewModel()
+            model.update(snapshot: snapshot(pairingCode: "123456"))
+            model.pairingCodeDidChange = { _ in false }
 
-        XCTAssertFalse(model.launchAtLoginEnabled)
-        XCTAssertTrue(model.launchAtLoginRequiresApproval)
-        XCTAssertEqual(model.launchAtLoginFeedback, .requiresApproval)
-    }
+            model.editPairingCode("123")
+            model.applyPairingCode()
 
-    func testLanguageSwitching() {
-        let model = SettingsViewModel()
-        var selected: AppLanguage?
-        model.languageDidChange = { selected = $0 }
+            #expect(!model.pairingCodeIsValid)
+            #expect(model.pairingCodeFeedbackKey == .invalid)
+            #expect(model.pairingCode == "123")
+        }
 
-        model.selectLanguage(.en)
-        XCTAssertEqual(model.language, .en)
-        XCTAssertEqual(selected, .en)
+        @Test func appliedPairingCodeAcceptsFutureSnapshots() {
+            let model = SettingsViewModel()
+            model.update(snapshot: snapshot(pairingCode: "123456"))
+            model.pairingCodeDidChange = { $0 == "654321" }
 
-        model.selectLanguage(.th)
-        XCTAssertEqual(model.language, .th)
-        XCTAssertEqual(selected, .th)
-    }
+            model.editPairingCode("654321")
+            model.applyPairingCode()
+            model.update(snapshot: snapshot(pairingCode: "111111"))
 
-    func testPreventTargetCapsLockToggle() {
-        let model = SettingsViewModel()
-        var changedValue: Bool?
-        model.preventTargetCapsLockDidChange = { changedValue = $0 }
+            #expect(model.pairingCodeIsValid)
+            #expect(model.pairingCode == "111111")
+        }
 
-        model.setPreventTargetCapsLock(false)
-        XCTAssertFalse(model.preventTargetCapsLock)
-        XCTAssertEqual(changedValue, false)
+        @Test func sourceCanRegeneratePairingCode() {
+            let model = SettingsViewModel()
+            model.update(snapshot: snapshot(pairingCode: "123456"))
+            model.pairingCodeRegenerationRequested = { "654321" }
 
-        model.setPreventTargetCapsLock(true)
-        XCTAssertTrue(model.preventTargetCapsLock)
-        XCTAssertEqual(changedValue, true)
-    }
+            model.regeneratePairingCode()
 
-    private func snapshot(
-        pairingCode: String,
-        status: ConnectionStatus = .searchingTarget,
-        language: AppLanguage = .th,
-        preventTargetCapsLock: Bool = true
-    ) -> SettingsSnapshot {
-        SettingsSnapshot(
-            role: .source,
-            pairingCode: pairingCode,
-            connectionStatus: status,
-            inputMonitoringReady: false,
-            helperEnabled: true,
-            currentVersion: "1.5.4",
-            canCheckForUpdates: true,
-            launchAtLoginState: .disabled,
-            language: language,
-            preventTargetCapsLock: preventTargetCapsLock
-        )
+            #expect(model.pairingCode == "654321")
+            #expect(model.pairingCodeFeedbackKey == .regenerated)
+        }
+
+        @Test func updateCheckInvokesCallback() {
+            let model = SettingsViewModel()
+            var updateCheckRequested = false
+            model.updateCheckRequested = { updateCheckRequested = true }
+
+            model.checkForUpdates()
+
+            #expect(updateCheckRequested)
+        }
+
+        @Test func permissionRefreshUsesPhysicalMonitorResult() {
+            let model = SettingsViewModel()
+            model.update(snapshot: snapshot(pairingCode: "123456"))
+            model.permissionRefreshRequested = { true }
+
+            model.refreshInputMonitoring()
+
+            #expect(model.inputMonitoringReady)
+        }
+
+        @Test func permissionResetInvokesRecoveryCallback() {
+            let model = SettingsViewModel()
+            var resetRequested = false
+            model.permissionResetRequested = { resetRequested = true }
+
+            model.resetInputMonitoring()
+
+            #expect(resetRequested)
+        }
+
+        @Test func helperEnabledInvokesCallback() {
+            let model = SettingsViewModel()
+            var requestedValue: Bool?
+            model.helperEnabledDidChange = { requestedValue = $0 }
+
+            model.setHelperEnabled(false)
+
+            #expect(!model.helperEnabled)
+            #expect(requestedValue == false)
+        }
+
+        @Test func launchAtLoginUsesActualResult() {
+            let model = SettingsViewModel()
+            model.launchAtLoginDidChange = { requested in
+                #expect(requested)
+                return LaunchAtLoginChangeResult(state: .requiresApproval, feedbackKey: .requiresApproval)
+            }
+
+            model.setLaunchAtLogin(true)
+
+            #expect(!model.launchAtLoginEnabled)
+            #expect(model.launchAtLoginRequiresApproval)
+            #expect(model.launchAtLoginFeedback == .requiresApproval)
+        }
+
+        @Test func languageSwitching() {
+            let model = SettingsViewModel()
+            var selected: AppLanguage?
+            model.languageDidChange = { selected = $0 }
+
+            model.selectLanguage(.en)
+            #expect(model.language == .en)
+            #expect(selected == .en)
+
+            model.selectLanguage(.th)
+            #expect(model.language == .th)
+            #expect(selected == .th)
+        }
+
+        @Test func preventTargetCapsLockToggle() {
+            let model = SettingsViewModel()
+            var changedValue: Bool?
+            model.preventTargetCapsLockDidChange = { changedValue = $0 }
+
+            model.setPreventTargetCapsLock(false)
+            #expect(!model.preventTargetCapsLock)
+            #expect(changedValue == false)
+
+            model.setPreventTargetCapsLock(true)
+            #expect(model.preventTargetCapsLock)
+            #expect(changedValue == true)
+        }
+
+        private func snapshot(
+            pairingCode: String,
+            status: ConnectionStatus = .searchingTarget,
+            language: AppLanguage = .th,
+            preventTargetCapsLock: Bool = true
+        ) -> SettingsSnapshot {
+            SettingsSnapshot(
+                role: .source,
+                pairingCode: pairingCode,
+                connectionStatus: status,
+                inputMonitoringReady: false,
+                helperEnabled: true,
+                currentVersion: "1.5.4",
+                canCheckForUpdates: true,
+                launchAtLoginState: .disabled,
+                language: language,
+                preventTargetCapsLock: preventTargetCapsLock
+            )
+        }
     }
 }
