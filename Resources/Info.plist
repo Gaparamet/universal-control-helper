@@ -33,10 +33,6 @@
         <string>_uniinputfix._tcp</string>
     </array>
     <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUFeedURL</key>
-    <string>https://github.com/feelgom/universal-control-helper/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>bURjfv9+uysjyYp3GT94KuJ9/FgtQxpCAE1m5yZ1O3A=</string>
+    <false/>
 </dict>
 </plist>

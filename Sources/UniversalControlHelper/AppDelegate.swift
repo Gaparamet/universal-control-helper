@@ -14,14 +14,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updaterReadinessObservation: NSKeyValueObservation?
     private var connectionStatus: ConnectionStatus = .starting
     private var inputMonitoringReady = false
+    // Updater intentionally not started until this fork has its own appcast feed and EdDSA key.
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: false,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureStatusItemButton()
         configureMainMenu()
@@ -33,7 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in self?.refreshInterface() }
         }
         configureForCurrentRole()
-        DispatchQueue.main.async { [weak self] in self?.showSettings() }
+        let isFirstLaunch = !preferences.hasShownSettingsOnce
+        let needsInputMonitoring = preferences.role == .source && !inputMonitoringReady
+        if isFirstLaunch || needsInputMonitoring {
+            preferences.hasShownSettingsOnce = true
+            DispatchQueue.main.async { [weak self] in self?.showSettings() }
+        }
     }
 
     private func configureStatusItemButton() {
