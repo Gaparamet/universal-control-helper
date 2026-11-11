@@ -10,18 +10,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inputSourceRelay: InputSourceRelay?
     private var physicalCapsLockMonitor: PhysicalCapsLockMonitor?
     private var targetCapsLockGuard: TargetCapsLockGuard?
+    private var keyProbe: KeyProbe?
     private var settingsController: SettingsWindowController?
     private var updaterReadinessObservation: NSKeyValueObservation?
     private var connectionStatus: ConnectionStatus = .starting
     private var inputMonitoringReady = false
+    // Updater intentionally not started until this fork has its own appcast feed and EdDSA key.
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: false,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureStatusItemButton()
         configureMainMenu()
@@ -33,7 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in self?.refreshInterface() }
         }
         configureForCurrentRole()
-        DispatchQueue.main.async { [weak self] in self?.showSettings() }
+        let isFirstLaunch = !preferences.hasShownSettingsOnce
+        let needsInputMonitoring = preferences.role == .source && !inputMonitoringReady
+        if isFirstLaunch || needsInputMonitoring {
+            preferences.hasShownSettingsOnce = true
+            DispatchQueue.main.async { [weak self] in self?.showSettings() }
+        }
     }
 
     private func configureStatusItemButton() {
@@ -62,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         physicalCapsLockMonitor = nil
         targetCapsLockGuard?.stop()
         targetCapsLockGuard = nil
+        keyProbe?.stop()
+        keyProbe = nil
         inputMonitoringReady = preferences.role == .target
 
         guard preferences.helperEnabled else {
@@ -114,6 +123,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             capsGuard.start()
             targetCapsLockGuard = capsGuard
+
+            let probe = KeyProbe()
+            probe.start()
+            keyProbe = probe
         }
 
         refreshInterface()

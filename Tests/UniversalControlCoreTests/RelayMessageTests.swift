@@ -1,25 +1,26 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UniversalControlCore
 
-final class RelayMessageTests: XCTestCase {
-    func testRoundTripToggleMessage() throws {
+@Suite struct RelayMessageTests {
+    @Test func roundTripToggleMessage() throws {
         let original = RelayMessage.toggleInputSource(token: "123456")
         let encoded = try RelayCodec.encodeLine(original)
         let decoded = try RelayCodec.decode(encoded.dropLast())
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testRoundTripInputSourceStateMessage() throws {
+    @Test func roundTripInputSourceStateMessage() throws {
         let original = RelayMessage.setInputSource(.korean, token: "123456")
         let encoded = try RelayCodec.encodeLine(original)
         let decoded = try RelayCodec.decode(encoded.dropLast())
 
-        XCTAssertEqual(decoded, original)
-        XCTAssertEqual(decoded.protocolVersion, 2)
-        XCTAssertEqual(decoded.inputSource, .korean)
+        #expect(decoded == original)
+        #expect(decoded.protocolVersion == 2)
+        #expect(decoded.inputSource == .korean)
     }
 
-    func testHandshakeRemainsDecodableByLegacyPeer() throws {
+    @Test func handshakeRemainsDecodableByLegacyPeer() throws {
         struct LegacyMessage: Decodable {
             let kind: String
             let token: String
@@ -28,16 +29,16 @@ final class RelayMessageTests: XCTestCase {
         let encoded = try RelayCodec.encodeLine(.hello(token: "123456"))
         let decoded = try JSONDecoder().decode(LegacyMessage.self, from: encoded.dropLast())
 
-        XCTAssertEqual(decoded.kind, "hello")
-        XCTAssertEqual(decoded.token, "123456")
+        #expect(decoded.kind == "hello")
+        #expect(decoded.token == "123456")
     }
 
-    func testLegacyPeerDoesNotReceiveDuplicateStateSynchronization() {
-        XCTAssertFalse(RelayProtocol.supportsExplicitInputSourceState(1))
-        XCTAssertTrue(RelayProtocol.supportsExplicitInputSourceState(2))
+    @Test func legacyPeerDoesNotReceiveDuplicateStateSynchronization() {
+        #expect(!RelayProtocol.supportsExplicitInputSourceState(1))
+        #expect(RelayProtocol.supportsExplicitInputSourceState(2))
     }
 
-    func testFramerHandlesSplitAndCombinedPackets() throws {
+    @Test func framerHandlesSplitAndCombinedPackets() throws {
         let first = try RelayCodec.encodeLine(.hello(token: "111111"))
         let second = try RelayCodec.encodeLine(.toggleInputSource(token: "111111"))
         let joined = first + second
@@ -47,95 +48,95 @@ final class RelayMessageTests: XCTestCase {
         let initial = try framer.append(joined.prefix(split))
         let remaining = try framer.append(joined.suffix(from: split))
 
-        XCTAssertLessThanOrEqual(initial.count, 1)
-        XCTAssertEqual(initial.count + remaining.count, 2)
-        XCTAssertEqual(try RelayCodec.decode((initial + remaining)[0]).kind, .hello)
-        XCTAssertEqual(try RelayCodec.decode((initial + remaining)[1]).kind, .toggleInputSource)
+        #expect(initial.count <= 1)
+        #expect(initial.count + remaining.count == 2)
+        #expect(try RelayCodec.decode((initial + remaining)[0]).kind == .hello)
+        #expect(try RelayCodec.decode((initial + remaining)[1]).kind == .toggleInputSource)
     }
 
-    func testFramerRejectsOversizedFrame() {
+    @Test func framerRejectsOversizedFrame() {
         var framer = LineFramer(maximumFrameSize: 4)
-        XCTAssertThrowsError(try framer.append(Data(repeating: 0x41, count: 5))) { error in
-            XCTAssertEqual(error as? LineFramer.FramingError, .frameTooLarge)
+        #expect(throws: LineFramer.FramingError.frameTooLarge) {
+            try framer.append(Data(repeating: 0x41, count: 5))
         }
     }
 
-    func testPairingCodeValidation() {
-        XCTAssertTrue(PairingCode.isValid("012345"))
-        XCTAssertFalse(PairingCode.isValid("12345"))
-        XCTAssertFalse(PairingCode.isValid("12A456"))
-        XCTAssertEqual(PairingCode.generate().count, 6)
+    @Test func pairingCodeValidation() {
+        #expect(PairingCode.isValid("012345"))
+        #expect(!PairingCode.isValid("12345"))
+        #expect(!PairingCode.isValid("12A456"))
+        #expect(PairingCode.generate().count == 6)
     }
 
-    func testInputSourceSelectionTogglesKoreanAndABC() {
+    @Test func inputSourceSelectionTogglesKoreanAndABC() {
         let sources = [
             InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
             InputSourceDescriptor(id: "com.apple.inputmethod.Korean.2SetKorean", name: "두벌식"),
         ]
-        XCTAssertEqual(
-            InputSourceSelection.targetID(currentID: "com.apple.inputmethod.Korean.2SetKorean", candidates: sources),
-            "com.apple.keylayout.ABC"
+        #expect(
+            InputSourceSelection.targetID(currentID: "com.apple.inputmethod.Korean.2SetKorean", candidates: sources)
+                == "com.apple.keylayout.ABC"
         )
-        XCTAssertEqual(
-            InputSourceSelection.targetID(currentID: "com.apple.keylayout.ABC", candidates: sources),
-            "com.apple.inputmethod.Korean.2SetKorean"
+        #expect(
+            InputSourceSelection.targetID(currentID: "com.apple.keylayout.ABC", candidates: sources)
+                == "com.apple.inputmethod.Korean.2SetKorean"
         )
     }
 
-    func testInputSourceSelectionClassifiesAndSelectsExplicitState() {
+    @Test func inputSourceSelectionClassifiesAndSelectsExplicitState() {
         let sources = [
             InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
             InputSourceDescriptor(id: "com.apple.inputmethod.Korean.2SetKorean", name: "두벌식"),
         ]
 
-        XCTAssertEqual(InputSourceSelection.state(id: sources[0].id, name: sources[0].name), .abc)
-        XCTAssertEqual(InputSourceSelection.state(id: sources[1].id, name: sources[1].name), .korean)
-        XCTAssertNil(InputSourceSelection.state(id: "com.apple.CharacterPaletteIM", name: "이모티콘"))
-        XCTAssertEqual(
-            InputSourceSelection.targetID(for: .abc, candidates: sources),
-            "com.apple.keylayout.ABC"
+        #expect(InputSourceSelection.state(id: sources[0].id, name: sources[0].name) == .abc)
+        #expect(InputSourceSelection.state(id: sources[1].id, name: sources[1].name) == .korean)
+        #expect(InputSourceSelection.state(id: "com.apple.CharacterPaletteIM", name: "이모티콘") == nil)
+        #expect(
+            InputSourceSelection.targetID(for: .abc, candidates: sources)
+                == "com.apple.keylayout.ABC"
         )
-        XCTAssertEqual(
-            InputSourceSelection.targetID(for: .korean, candidates: sources),
-            "com.apple.inputmethod.Korean.2SetKorean"
+        #expect(
+            InputSourceSelection.targetID(for: .korean, candidates: sources)
+                == "com.apple.inputmethod.Korean.2SetKorean"
         )
     }
 
-    func testInputSourceSelectionTogglesThaiAndABC() {
+    @Test func inputSourceSelectionTogglesThaiAndABC() {
         let sources = [
             InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
             InputSourceDescriptor(id: "com.apple.keylayout.Thai", name: "Thai"),
         ]
-        XCTAssertEqual(
-            InputSourceSelection.targetID(currentID: "com.apple.keylayout.Thai", candidates: sources),
-            "com.apple.keylayout.ABC"
+        #expect(
+            InputSourceSelection.targetID(currentID: "com.apple.keylayout.Thai", candidates: sources)
+                == "com.apple.keylayout.ABC"
         )
-        XCTAssertEqual(
-            InputSourceSelection.targetID(currentID: "com.apple.keylayout.ABC", candidates: sources),
-            "com.apple.keylayout.Thai"
+        #expect(
+            InputSourceSelection.targetID(currentID: "com.apple.keylayout.ABC", candidates: sources)
+                == "com.apple.keylayout.Thai"
         )
     }
 
-    func testInputSourceSelectionClassifiesAndSelectsThaiState() {
+    @Test func inputSourceSelectionClassifiesAndSelectsThaiState() {
         let sources = [
             InputSourceDescriptor(id: "com.apple.keylayout.ABC", name: "ABC"),
             InputSourceDescriptor(id: "com.apple.keylayout.Thai", name: "Thai"),
         ]
 
-        XCTAssertEqual(InputSourceSelection.state(id: sources[0].id, name: sources[0].name), .abc)
-        XCTAssertEqual(InputSourceSelection.state(id: sources[1].id, name: sources[1].name), .thai)
-        XCTAssertEqual(
-            InputSourceSelection.targetID(for: .thai, candidates: sources),
-            "com.apple.keylayout.Thai"
+        #expect(InputSourceSelection.state(id: sources[0].id, name: sources[0].name) == .abc)
+        #expect(InputSourceSelection.state(id: sources[1].id, name: sources[1].name) == .thai)
+        #expect(
+            InputSourceSelection.targetID(for: .thai, candidates: sources)
+                == "com.apple.keylayout.Thai"
         )
     }
 
-    func testRoundTripThaiInputSourceStateMessage() throws {
+    @Test func roundTripThaiInputSourceStateMessage() throws {
         let original = RelayMessage.setInputSource(.thai, token: "123456")
         let encoded = try RelayCodec.encodeLine(original)
         let decoded = try RelayCodec.decode(encoded.dropLast())
 
-        XCTAssertEqual(decoded, original)
-        XCTAssertEqual(decoded.inputSource, .thai)
+        #expect(decoded == original)
+        #expect(decoded.inputSource == .thai)
     }
 }

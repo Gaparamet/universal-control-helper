@@ -405,19 +405,21 @@ private struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Divider()
+                if model.role == .target {
+                    Divider()
 
-                Toggle(
-                    isOn: Binding(
-                        get: { model.preventTargetCapsLock },
-                        set: { model.setPreventTargetCapsLock($0) }
-                    )
-                ) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L10n.string(.preventTargetCapsLockTitle, language: model.language))
-                        Text(L10n.string(.preventTargetCapsLockSubtitle, language: model.language))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Toggle(
+                        isOn: Binding(
+                            get: { model.preventTargetCapsLock },
+                            set: { model.setPreventTargetCapsLock($0) }
+                        )
+                    ) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.string(.preventTargetCapsLockTitle, language: model.language))
+                            Text(L10n.string(.preventTargetCapsLockSubtitle, language: model.language))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

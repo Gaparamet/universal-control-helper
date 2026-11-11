@@ -1,4 +1,5 @@
 import Carbon
+import os
 import IOKit.hid
 import UniversalControlCore
 
@@ -64,12 +65,23 @@ final class PhysicalCapsLockMonitor {
     private func handle(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
         guard isPhysicalDevice(IOHIDElementGetDevice(element)) else { return }
-        guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad),
-              IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock),
-              IOHIDValueGetIntegerValue(value) == 1 else {
+        guard IOHIDElementGetUsagePage(element) == UInt32(kHIDPage_KeyboardOrKeypad) else { return }
+        if Diag.probeEnabled, IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardDeleteOrBackspace) {
+            Diag.keys.notice("SRC delete \(IOHIDValueGetIntegerValue(value) == 1 ? "down" : "up", privacy: .public)")
             return
         }
-        onCapsLockPressed?()
+        guard IOHIDElementGetUsage(element) == UInt32(kHIDUsage_KeyboardCapsLock) else { return }
+        switch IOHIDValueGetIntegerValue(value) {
+        case 1:
+            Diag.relay.notice("SRC capsDown current=\(InputSourceController.currentState?.rawValue ?? "nil", privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            onCapsLockPressed?()
+            SourceCapsLockNeutralizer.schedule(reason: "down")
+        case 0:
+            Diag.relay.notice("SRC capsUp caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            SourceCapsLockNeutralizer.schedule(reason: "up")
+        default:
+            return
+        }
     }
 
     private func isPhysicalDevice(_ device: IOHIDDevice?) -> Bool {
@@ -87,6 +99,52 @@ final class PhysicalCapsLockMonitor {
 
     deinit {
         stop()
+    }
+}
+
+/// Experiment: while Universal Control forwards the Source keyboard, a physical Caps Lock press
+/// toggles the real Caps Lock on the Source and UC re-applies it on the Target. Clear it on the
+/// Source right after each press/release. Runs on the main thread.
+enum SourceCapsLockNeutralizer {
+    static var isEnabled: () -> Bool = {
+        UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
+    }
+    static var delays: [TimeInterval] = [0, 0.008, 0.016, 0.03, 0.06, 0.12]
+
+    private static var pending: [DispatchWorkItem] = []
+
+    static func schedule(reason: String) {
+        guard isEnabled() else { return }
+        cancel()
+        for delay in delays {
+            if delay <= 0 {
+                run(reason: reason, delay: delay)
+            } else {
+                let item = DispatchWorkItem { run(reason: reason, delay: delay) }
+                pending.append(item)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+            }
+        }
+    }
+
+    static func cancel() {
+        pending.forEach { $0.cancel() }
+        pending.removeAll()
+    }
+
+    internal static func reset() {
+        cancel()
+        isEnabled = {
+            UserDefaults.standard.object(forKey: "sourceClearsCapsLock") as? Bool ?? true
+        }
+        delays = [0, 0.008, 0.016, 0.03, 0.06, 0.12]
+    }
+
+    private static func run(reason: String, delay: TimeInterval) {
+        guard CapsLockManager.isCapsLockOn else { return }
+        let ms = Int((delay * 1000).rounded())
+        Diag.caps.notice("SRC neutralize reason=\(reason, privacy: .public) +\(ms, privacy: .public)ms")
+        _ = CapsLockManager.disableCapsLock()
     }
 }
 
@@ -149,6 +207,7 @@ final class InputSourceMonitor {
 
     fileprivate func inputSourceDidChange() {
         guard let state = InputSourceController.currentState, state != lastState else { return }
+        Diag.relay.notice("SRC inputSourceChanged \(self.lastState?.rawValue ?? "nil", privacy: .public)->\(state.rawValue, privacy: .public)")
         lastState = state
         stateDidChange?(state)
     }
@@ -173,28 +232,88 @@ private func inputSourceChangedCallback(
 enum TargetInputInjector {
     static var shouldPreventCapsLock: () -> Bool = { true }
 
+    // Testable injection hooks
+    internal static var uptimeProvider: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    internal static var currentSourceProvider: () -> InputSourceState? = { InputSourceController.currentState }
+    internal static var sourceToggler: () -> Void = { InputSourceController.toggleInputSource() }
+    internal static var sourceSelector: (InputSourceState) -> Void = { InputSourceController.select($0) }
+    internal static var suppressionHandler: () -> Void = { CapsLockManager.suppressCapsLock() }
+    internal static var isCapsLockOnProvider: () -> Bool = { CapsLockManager.isCapsLockOn }
+
+    private static var lastSwitchTime: TimeInterval = 0
+    private static var lastTargetState: InputSourceState?
+
+    private static func tgtState(_ state: InputSourceState?) -> String {
+        state?.rawValue ?? "nil"
+    }
+
     static func handle(_ message: RelayMessage) {
+        let now = uptimeProvider()
         switch message.kind {
         case .toggleInputSource:
-            InputSourceController.toggleInputSource()
+            Diag.startCapsProbe(reason: "toggleInputSource")
+            Diag.relay.notice("TGT recv kind=toggleInputSource desired=- current=\(tgtState(currentSourceProvider()), privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            // Deduplicate rapid successive toggle requests within 100ms
+            if now - lastSwitchTime < 0.100 {
+                Diag.relay.notice("TGT drop reason=toggle-dedupe-100ms")
+                return
+            }
+            lastSwitchTime = now
+            sourceToggler()
+            lastTargetState = currentSourceProvider()
+            Diag.relay.notice("TGT after current=\(tgtState(lastTargetState), privacy: .public)")
             if shouldPreventCapsLock() {
-                CapsLockManager.suppressCapsLock()
+                suppressionHandler()
             }
         case .setInputSource:
-            guard let inputSource = message.inputSource else { return }
-            InputSourceController.select(inputSource)
+            guard let desired = message.inputSource else { return }
+            let current = currentSourceProvider()
+            Diag.startCapsProbe(reason: "setInputSource")
+            Diag.relay.notice("TGT recv kind=setInputSource desired=\(desired.rawValue, privacy: .public) current=\(tgtState(current), privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
+            if current == desired {
+                // Already in desired state; clean up unintended Caps Lock if active
+                if shouldPreventCapsLock() && isCapsLockOnProvider() {
+                    suppressionHandler()
+                }
+                Diag.relay.notice("TGT drop reason=already-desired")
+                return
+            }
+            // Deduplicate if a switch to this state just occurred within 150ms
+            if lastTargetState == desired && now - lastSwitchTime < 0.150 {
+                Diag.relay.notice("TGT drop reason=set-dedupe-150ms")
+                return
+            }
+            lastSwitchTime = now
+            lastTargetState = desired
+            sourceSelector(desired)
+            Diag.relay.notice("TGT after current=\(tgtState(currentSourceProvider()), privacy: .public)")
             if shouldPreventCapsLock() {
-                CapsLockManager.suppressCapsLock()
+                suppressionHandler()
             }
         case .hello, .helloAck:
             break
         }
+    }
+
+    internal static func resetState() {
+        lastSwitchTime = 0
+        lastTargetState = nil
+        uptimeProvider = { ProcessInfo.processInfo.systemUptime }
+        currentSourceProvider = { InputSourceController.currentState }
+        sourceToggler = { InputSourceController.toggleInputSource() }
+        sourceSelector = { InputSourceController.select($0) }
+        suppressionHandler = { CapsLockManager.suppressCapsLock() }
+        isCapsLockOnProvider = { CapsLockManager.isCapsLockOn }
     }
 }
 
 final class TargetCapsLockGuard {
     private var isStarted = false
     var isEnabled: () -> Bool = { true }
+
+    // Testable injection hooks
+    internal var isCapsLockOnProvider: () -> Bool = { CapsLockManager.isCapsLockOn }
+    internal var suppressionHandler: () -> Void = { CapsLockManager.suppressCapsLock() }
 
     func start() {
         guard !isStarted else { return }
@@ -221,8 +340,21 @@ final class TargetCapsLockGuard {
     }
 
     fileprivate func inputSourceDidChange() {
-        guard isEnabled() else { return }
-        CapsLockManager.suppressCapsLock()
+        let enabled = isEnabled()
+        guard enabled else {
+            Diag.relay.notice("TGT guard inputSourceChanged capsOn=- enabled=false")
+            return
+        }
+        // Suppress only if Caps Lock or AlphaShift is actually detected active
+        let capsOn = isCapsLockOnProvider()
+        Diag.relay.notice("TGT guard inputSourceChanged capsOn=\(capsOn, privacy: .public) enabled=\(enabled, privacy: .public)")
+        if capsOn {
+            suppressionHandler()
+        }
+    }
+
+    internal func inputSourceDidChangeForTesting() {
+        inputSourceDidChange()
     }
 
     deinit {
@@ -243,6 +375,9 @@ private func targetInputSourceChangedCallback(
 }
 
 enum InputSourceController {
+    private static var cachedSources: [TISInputSource]?
+    private static var isEnabledSourcesObserverRegistered = false
+
     static var currentState: InputSourceState? {
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
             return nil
@@ -285,9 +420,34 @@ enum InputSourceController {
         return candidates.first { identifier(of: $0) == targetID }
     }
 
+    public static func invalidateCache() {
+        cachedSources = nil
+    }
+
+    private static func registerEnabledSourcesObserverIfNeeded() {
+        guard !isEnabledSourcesObserverRegistered else { return }
+        isEnabledSourcesObserverRegistered = true
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDistributedCenter(),
+            nil,
+            { _, _, _, _, _ in
+                InputSourceController.invalidateCache()
+            },
+            kTISNotifyEnabledKeyboardInputSourcesChanged,
+            nil,
+            .deliverImmediately
+        )
+    }
+
     private static func inputSources() -> [TISInputSource] {
+        registerEnabledSourcesObserverIfNeeded()
+        if let cached = cachedSources {
+            return cached
+        }
         guard let unmanaged = TISCreateInputSourceList(nil, false) else { return [] }
-        return unmanaged.takeRetainedValue() as! [TISInputSource]
+        let list = unmanaged.takeRetainedValue() as! [TISInputSource]
+        cachedSources = list
+        return list
     }
 
     private static func descriptor(_ source: TISInputSource) -> InputSourceDescriptor {
