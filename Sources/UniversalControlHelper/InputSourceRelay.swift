@@ -1,4 +1,5 @@
 import Carbon
+import os
 import IOKit.hid
 import UniversalControlCore
 
@@ -69,6 +70,7 @@ final class PhysicalCapsLockMonitor {
               IOHIDValueGetIntegerValue(value) == 1 else {
             return
         }
+        Diag.relay.notice("SRC capsDown current=\(InputSourceController.currentState?.rawValue ?? "nil", privacy: .public)")
         onCapsLockPressed?()
     }
 
@@ -149,6 +151,7 @@ final class InputSourceMonitor {
 
     fileprivate func inputSourceDidChange() {
         guard let state = InputSourceController.currentState, state != lastState else { return }
+        Diag.relay.notice("SRC inputSourceChanged \(self.lastState?.rawValue ?? "nil", privacy: .public)->\(state.rawValue, privacy: .public)")
         lastState = state
         stateDidChange?(state)
     }
@@ -184,37 +187,50 @@ enum TargetInputInjector {
     private static var lastSwitchTime: TimeInterval = 0
     private static var lastTargetState: InputSourceState?
 
+    private static func tgtState(_ state: InputSourceState?) -> String {
+        state?.rawValue ?? "nil"
+    }
+
     static func handle(_ message: RelayMessage) {
         let now = uptimeProvider()
         switch message.kind {
         case .toggleInputSource:
+            Diag.startCapsProbe(reason: "toggleInputSource")
+            Diag.relay.notice("TGT recv kind=toggleInputSource desired=- current=\(tgtState(currentSourceProvider()), privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
             // Deduplicate rapid successive toggle requests within 100ms
             if now - lastSwitchTime < 0.100 {
+                Diag.relay.notice("TGT drop reason=toggle-dedupe-100ms")
                 return
             }
             lastSwitchTime = now
             sourceToggler()
             lastTargetState = currentSourceProvider()
+            Diag.relay.notice("TGT after current=\(tgtState(lastTargetState), privacy: .public)")
             if shouldPreventCapsLock() {
                 suppressionHandler()
             }
         case .setInputSource:
             guard let desired = message.inputSource else { return }
             let current = currentSourceProvider()
+            Diag.startCapsProbe(reason: "setInputSource")
+            Diag.relay.notice("TGT recv kind=setInputSource desired=\(desired.rawValue, privacy: .public) current=\(tgtState(current), privacy: .public) caps=\(CapsLockManager.flagSnapshot(), privacy: .public)")
             if current == desired {
                 // Already in desired state; clean up unintended Caps Lock if active
                 if shouldPreventCapsLock() && isCapsLockOnProvider() {
                     suppressionHandler()
                 }
+                Diag.relay.notice("TGT drop reason=already-desired")
                 return
             }
             // Deduplicate if a switch to this state just occurred within 150ms
             if lastTargetState == desired && now - lastSwitchTime < 0.150 {
+                Diag.relay.notice("TGT drop reason=set-dedupe-150ms")
                 return
             }
             lastSwitchTime = now
             lastTargetState = desired
             sourceSelector(desired)
+            Diag.relay.notice("TGT after current=\(tgtState(currentSourceProvider()), privacy: .public)")
             if shouldPreventCapsLock() {
                 suppressionHandler()
             }
@@ -268,9 +284,15 @@ final class TargetCapsLockGuard {
     }
 
     fileprivate func inputSourceDidChange() {
-        guard isEnabled() else { return }
+        let enabled = isEnabled()
+        guard enabled else {
+            Diag.relay.notice("TGT guard inputSourceChanged capsOn=- enabled=false")
+            return
+        }
         // Suppress only if Caps Lock or AlphaShift is actually detected active
-        if isCapsLockOnProvider() {
+        let capsOn = isCapsLockOnProvider()
+        Diag.relay.notice("TGT guard inputSourceChanged capsOn=\(capsOn, privacy: .public) enabled=\(enabled, privacy: .public)")
+        if capsOn {
             suppressionHandler()
         }
     }

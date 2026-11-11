@@ -64,10 +64,22 @@ public enum CapsLockManager {
         return setResult == kIOReturnSuccess
     }
 
+    /// Raw per-source Caps Lock state for diagnostics (does not use injectable providers).
+    internal static func flagSnapshot() -> String {
+        let io = queryIOKitCapsLockState().isOn
+        let hid = CGEventSource.flagsState(.hidSystemState).contains(.maskAlphaShift)
+        let ses = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        let ns = NSEvent.modifierFlags.contains(.capsLock)
+        return "io=\(io ? 1 : 0) hid=\(hid ? 1 : 0) ses=\(ses ? 1 : 0) ns=\(ns ? 1 : 0)"
+    }
+
     @discardableResult
     public static func disableCapsLock() -> Bool {
+        Diag.caps.notice("disable before=\(flagSnapshot(), privacy: .public)")
+        defer { Diag.caps.notice("disable after=\(flagSnapshot(), privacy: .public)") }
         _ = setIOHIDModifierLockStateProvider(false)
         if isQuartzAlphaShiftOnProvider() {
+            Diag.caps.notice("disable pulse true->false ran")
             // Pulse toggle true then false to force IOHIDSystem to notify WindowServer and clear maskAlphaShift
             _ = setIOHIDModifierLockStateProvider(true)
             _ = setIOHIDModifierLockStateProvider(false)
@@ -88,6 +100,7 @@ public enum CapsLockManager {
 
         let workItem = DispatchWorkItem {
             if isCapsLockOn {
+                Diag.caps.notice("suppress follow-up found Caps Lock on")
                 _ = disableCapsLock()
             }
         }
